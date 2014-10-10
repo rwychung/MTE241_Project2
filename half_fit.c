@@ -49,17 +49,7 @@ mem_block_t *memory = NULL;
  * buckets[10] = 32768 - 65535 bytes
  */
 // The buckets store the address of each 32 byte block as 10bits.
-bucket_t buckets[11];
-
-void bucketInit()
-{
-    int i = 0;
-    for (i=0, i<11, i++)
-    {
-        buckets[i].head = -1;
-        buckets[i].tail = -1;
-    }
-}
+int buckets[11] = {-1};
 
 void printBinary(uint32_t num)
 {
@@ -111,20 +101,20 @@ int getBucketMemory(int index, int size)
     mem_block_t memBlock, splitMemBlock;
 
     // Get the position of the address in the memory array.
-    blockIndex = ADDR_TO_INDEX(buckets[index].head);
+    blockIndex = ADDR_TO_INDEX(buckets[index]);
     memBlock = memory[blockIndex]
 
     // Get the second 32 bit block of the block of memory which
     // contains information about the bucket the block is in.
-    if (GET_NEXT_ADDR(memory[ADDR_TO_INDEX(buckets[index].head) + 1]) == buckets[index].head)
+    if (GET_NEXT_ADDR(memory[ADDR_TO_INDEX(buckets[index]) + 1]) == buckets[index])
     {
         // If there are no other blocks in bucket.
-        buckets[index].head = -1;
+        buckets[index] = -1;
     }
     else
     {
         // If there is another block in the bucket, get the next block of memory in the bucket.
-        buckets[index].head = GET_NEXT_ADDR(memory[ADDR_TO_INDEX(buckets[index].head) + 1]);
+        buckets[index] = GET_NEXT_ADDR(memory[ADDR_TO_INDEX(buckets[index]) + 1]);
     }
 
     // Split memory
@@ -148,35 +138,20 @@ int getBucketMemory(int index, int size)
     }
 
 
+
+
+
+
+
+
+
+
+
+
+
     // Update the split blocks of memory
     // Place left over memory in new bucket.
     // Return address to block of memory
-}
-
-int placeInBucket(mem_block_t emptyBlock, int address)
-{
-    //choose appropriate bucket
-    //place into bucket and do linking
-    int index = 0;
-    int size = GET_SIZE(emptyBlock);
-    // if # of blocks is greater than 2^index, choose bucket
-    while (size < 2^index)
-        index++;
-
-    // attach to end of list
-    if (buckets[index].head == -1) //empty bucket
-    {
-        buckets[index].head = address;
-        SET_PREV_ADDR(memory[ADDR_TO_INDEX(address) + 1], address);
-        SET_NEXT_ADDR(memory[ADDR_TO_INDEX(address) + 1], address);
-    }
-    else // there are blocks in the bucket
-    {
-        SET_NEXT_ADDR(memory[ADDR_TO_INDEX(buckets[index].tail]), address);
-        SET_PREV_ADDR(memory[ADDR_TO_INDEX(address) + 1], buckets[index].tail);
-        SET_NEXT_ADDR(memory[ADDR_TO_INDEX(address) + 1], address);
-        buckets[index].tail = address;
-    }      
 }
 
 void half_init(void)
