@@ -3,13 +3,16 @@
 int main(void)
 {
     half_init();
-    half_alloc(63);
-    half_alloc(64);
-    half_alloc(10);
-    half_alloc(12312);
-    half_alloc(27);
-    half_alloc(28);
-    half_alloc(32764);
-    half_alloc(32);
+    half_alloc(1000);
+    half_alloc(1000);
+    half_alloc(1000);
+    half_alloc(1000);
+    half_alloc(1000);
+    half_alloc(1000);
+    half_alloc(1000);
+    half_alloc(10000);
+    // Not enough memory to allocate these.
+    half_alloc(10000);
+    half_alloc(10000);
     return 0;
 }
