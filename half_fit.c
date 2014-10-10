@@ -3,10 +3,6 @@
 #include <stdlib.h>
 #include "half_fit.h"
 
-#define BLOCKS_TO_BYTES(blocks) (blocks << 5)
-#define BLOCKS_TO_INDEX(blocks) (blocks << 3)
-#define BYTES_TO_BLOCKS(bytes) (bytes >> 5)
-
 // Header->  prev_addr  next_addr  block_size  alloc_flag
 //           0000000000 0000000000 00000000000 0
 
@@ -29,6 +25,12 @@
 // Convert address to its index in the memory block.
 #define ADDR_TO_INDEX(addr) (addr << 3)
 #define INDEX_TO_ADDR(index) (index >> 3)
+
+// Conversions
+#define BLOCKS_TO_BYTES(blocks) (blocks << 5)
+#define BLOCKS_TO_INDEX(blocks) (blocks << 3)
+#define BYTES_TO_BLOCKS(bytes) (bytes >> 5)
+
 
 const int MEMORY_SIZE = 32768;  // The total number of bytes available.
 const int UNIT_BLOCK_SIZE = 32; // Unit memory block size is 32 bytes.
