@@ -2,17 +2,17 @@
 
 int main(void)
 {
+    void *ptr1, *ptr2;
     half_init();
-    half_alloc(1000);
-    half_alloc(1000);
-    half_alloc(1000);
-    half_alloc(1000);
-    half_alloc(1000);
-    half_alloc(1000);
-    half_alloc(1000);
-    half_alloc(10000);
-    // Not enough memory to allocate these.
-    half_alloc(10000);
-    half_alloc(10000);
+    ptr1 = half_alloc(1000);
+    ptr2 = half_alloc(1012);
+
+    half_free(ptr1);
+    printMemory();
+    printBucketInfo();
+
+    half_free(ptr2);
+    printMemory();
+    printBucketInfo();
     return 0;
 }

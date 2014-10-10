@@ -7,30 +7,32 @@
 //           0000000000 0000000000 00000000000 0
 
 // 0x003FFFFF = 0000 0000 0011 1111 1111 1111 1111 1111b
-#define SET_PREV_ADDR(header, addr) (header = (header & 0x003FFFFFU) | (addr << 22))
+#define SET_PREV_ADDR(header, addr) ((header) = ((header) & 0x003FFFFFU) | ((addr) << 22))
 // 0xFFC00FFF = 1111 1111 1100 0000 0000 1111 1111 1111b
-#define SET_NEXT_ADDR(header, addr) (header = (header & 0xFFC00FFFU) | (addr << 12))
+#define SET_NEXT_ADDR(header, addr) ((header) = ((header) & 0xFFC00FFFU) | ((addr) << 12))
 // 0xFFFFF001 = 1111 1111 1111 1111 1111 0000 0000 0001b
-#define SET_SIZE(header, size) (header = (header & 0xFFFFF001U) | (size << 1))
+#define SET_SIZE(header, size) ((header) = ((header) & 0xFFFFF001U) | ((size) << 1))
 // 0xFFFFFFFE = 1111 1111 1111 1111 1111 1111 1111 1110b
-#define SET_ALLOC(header, flag) (header = (header & 0xFFFFFFFEU) | flag)
+#define SET_ALLOC(header, flag) ((header) = ((header) & 0xFFFFFFFEU) | (flag))
 
 // 0x000003FF = 0000 0000 0000 0000 0000 0011 1111 1111b
-#define GET_PREV_ADDR(header) ((header >> 22) & 0x000003FFU)
-#define GET_NEXT_ADDR(header) ((header >> 12) & 0x000003FFU)
+#define GET_PREV_ADDR(header) (((header) >> 22) & 0x000003FFU)
+#define GET_NEXT_ADDR(header) (((header) >> 12) & 0x000003FFU)
 // 0x000007FF = 0000 0000 0000 0000 0000 0011 1111 1111b
-#define GET_SIZE(header) ((header >> 1) & 0x000007FFU)
-#define GET_ALLOC(header) (header & 0x1U)
+#define GET_SIZE(header) (((header) >> 1) & 0x000007FFU)
+#define GET_ALLOC(header) ((header) & 0x1U)
+
+// Get the header to a block of memory received from the user.
+#define GET_MEMORY_HEADER(memPtr) ((memPtr) - 1)
 
 // Convert address to its index in the memory block.
-#define ADDR_TO_INDEX(addr) (addr << 3)
-#define INDEX_TO_ADDR(index) (index >> 3)
+#define ADDR_TO_INDEX(addr) ((addr) << 3)
+#define INDEX_TO_ADDR(index) ((index) >> 3)
 
 // Conversions
-#define BLOCKS_TO_BYTES(blocks) (blocks << 5)
-#define BLOCKS_TO_INDEX(blocks) (blocks << 3)
-#define BYTES_TO_BLOCKS(bytes) (bytes >> 5)
-
+#define BLOCKS_TO_BYTES(blocks) ((blocks) << 5)
+#define BLOCKS_TO_INDEX(blocks) ((blocks) << 3)
+#define BYTES_TO_BLOCKS(bytes) ((bytes) >> 5)
 
 const int MEMORY_SIZE = 32768;  // The total number of bytes available.
 const int UNIT_BLOCK_SIZE = 32; // Unit memory block size is 32 bytes.
@@ -41,6 +43,7 @@ const int UNIT_BLOCK_SIZE = 32; // Unit memory block size is 32 bytes.
 mem_block_t *memory = NULL;
 
 /*
+ * The buckets store the address of each 32 byte block as 10 bits.
  * buckets[0] = 32 - 63 bytes
  * buckets[1] = 64 - 127 bytes
  * buckets[2] = 128 - 255 bytes
@@ -53,7 +56,6 @@ mem_block_t *memory = NULL;
  * buckets[9] = 16384 - 32767 bytes
  * buckets[10] = 32768 - 65535 bytes
  */
-// The buckets store the address of each 32 byte block as 10bits.
 int buckets[11] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 
 void printBinary(uint32_t num)
@@ -111,6 +113,11 @@ void printMemory()
     }
 
     printf("***********************\n");
+}
+
+int getMemBlockIndex(mem_block_t *memBlock)
+{
+    return (memBlock - memory);
 }
 
 int getBucketIndex(int size)
@@ -179,6 +186,11 @@ void placeInBucket(mem_block_t emptyBlock, int address)
     buckets[index] = address;
 }
 
+void removeFromBucket(mem_block_t memBlock)
+{
+    //
+
+}
 
 /*
  * Finds the smallest portion of the memory block needed to allocate the requested bytes.
@@ -261,9 +273,6 @@ void* getBucketMemory(int bucketIndex, int bytesRequested)
     // Splits the memory block if necessary.
     splitMemoryBlock(memBlock, blockIndex, bytesRequested);
 
-printMemory();
-printBucketInfo();
-
     // Return address to user accessible memory, which excludes the header.
     return (void *)(&memory[blockIndex + 1]);
 }
@@ -272,32 +281,6 @@ void half_init(void)
 {
     // Array of 32 bit blocks which make up the 32768 byte block.
     memory = (mem_block_t *)malloc(MEMORY_SIZE);
-
-    /*
-    SET_PREV_ADDR(memory[0], 0x000003FE);
-    printBinary(memory[0]);
-    SET_NEXT_ADDR(memory[0], 0x000003FE);
-    printBinary(memory[0]);
-    SET_SIZE(memory[0], 1024);
-    printBinary(memory[0]);
-    SET_ALLOC(memory[0], 1);
-    printBinary(memory[0]);
-
-    SET_PREV_ADDR(memory[0], 0x0000333);
-    printBinary(memory[0]);
-    SET_NEXT_ADDR(memory[0], 0x0000333);
-    printBinary(memory[0]);
-    SET_SIZE(memory[0], 100);
-    printBinary(memory[0]);
-    SET_ALLOC(memory[0], 0);
-    printBinary(memory[0]);
-
-    printf("---------------\n");
-    printBinary(GET_PREV_ADDR(memory[0]));
-    printBinary(GET_NEXT_ADDR(memory[0]));
-    printBinary(GET_SIZE(memory[0]));
-    printBinary(GET_ALLOC(memory[0]));
-    */
 
     // Sets the information in the header.
     SET_PREV_ADDR(memory[0], 0);
@@ -332,7 +315,6 @@ void *half_alloc(int size)
     bucketIndex = getBucketIndex(size);
 
     // Finds the next biggest bucket that contains blocks of memory.
-    printf("Request of %d bytes belong into bucket # %d\n", size - 4, bucketIndex);
 
     while (buckets[bucketIndex] == -1 && bucketIndex < 11)
     {
@@ -346,6 +328,64 @@ void *half_alloc(int size)
     return getBucketMemory(bucketIndex, size);
 }
 
-void half_free(void * memory)
+void half_free(void * freeMemory)
 {
+    // One mem_block_t size before the memory address returns the header of the block.
+    mem_block_t *freeBlock = GET_MEMORY_HEADER((mem_block_t *)freeMemory);
+    int index = getMemBlockIndex(freeBlock);
+    int startIndex = index;
+    int blockSize = GET_SIZE(*freeBlock);
+    int blockIndex;
+
+    printf("Index of block to free: %d\n", getMemBlockIndex(freeBlock));
+
+    /*
+     * Coalesce the current block of memory with the previous and next blocks.
+     * Caalescing previous block:
+     *      1. Update starting index.
+     *      2. Update block size.
+     *      3. Update the new block's next pointer with the current block's next pointer.
+     * Calescing next block:
+     *      1. Update block size.
+     *      2. Update the new block's next pointer with the second block's next pointer.
+     */
+
+    // Coalesce previous block. BlockIndex is the index of the previous block.
+    blockIndex = ADDR_TO_INDEX(GET_PREV_ADDR(*freeBlock));
+    if (index != blockIndex)
+    {
+        // Check if previous block can be coalesced.
+        if (!GET_ALLOC(memory[blockIndex]))
+        {
+            startIndex = blockIndex;
+            blockSize += GET_SIZE(memory[blockIndex]);
+            SET_NEXT_ADDR(memory[startIndex], GET_NEXT_ADDR(memory[index]));
+            // Remove coalesced block from its bucket.
+        }
+    }
+
+    // Coalesce next block. BlockIndex is the index of next block.
+    blockIndex = ADDR_TO_INDEX(GET_NEXT_ADDR(*freeBlock));
+    if (index != blockIndex)
+    {
+        if (!GET_ALLOC(memory[blockIndex]))
+        {
+            blockSize += GET_SIZE(memory[blockIndex]);
+            if (blockIndex == ADDR_TO_INDEX(GET_NEXT_ADDR(memory[blockIndex])))
+            {
+                // If this is the last block, update the next pointer to its own address.
+                SET_NEXT_ADDR(memory[startIndex], INDEX_TO_ADDR(startIndex));
+            }
+            else
+            {
+                SET_NEXT_ADDR(memory[startIndex], GET_NEXT_ADDR(memory[blockIndex]));
+            }
+            // Remove coalesced block from its bucket.
+        }
+    }
+
+    // Set header of the new coalesced block.
+    SET_SIZE(memory[startIndex], blockSize);
+    SET_ALLOC(memory[startIndex], 0);
+    placeInBucket(memory[startIndex], INDEX_TO_ADDR(startIndex));
 }
