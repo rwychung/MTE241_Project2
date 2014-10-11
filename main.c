@@ -7,6 +7,9 @@ int main(void)
     ptr1 = half_alloc(1000);
     ptr2 = half_alloc(1012);
 
+    printMemory();
+    printBucketInfo();
+
     half_free(ptr1);
     printMemory();
     printBucketInfo();

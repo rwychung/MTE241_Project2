@@ -76,30 +76,31 @@ void printBinary(uint32_t num)
 
 void printHeaderInfo(mem_block_t blockHeader)
 {
-    printf("-----------------------\n");
+    printf("***************************************\n");
+    printf("Print header info\n");
     printf("Prev Addr: %d\n", GET_PREV_ADDR(blockHeader));
     printf("Next Addr: %d\n", GET_NEXT_ADDR(blockHeader));
     printf("Block size: %d\n", GET_SIZE(blockHeader));
     printf("Block size (bytes): %d\n", BLOCKS_TO_BYTES(GET_SIZE(blockHeader)));
     printf("Allocated: %s\n", GET_ALLOC(blockHeader) ? "Yes" : "No");
-    printf("-----------------------\n");
+    printf("***************************************\n");
 }
 
 void printBucketInfo()
 {
-    printf("***********************\n");
+    printf("***************************************\n");
     printf("Printing Bucket Info\n");
     int i;
     for (i=0; i<11; i++)
     {
         printf("Bucket #%d Addr: %d \n", i, buckets[i]);
     }
-    printf("***********************\n");
+    printf("***************************************\n");
 }
 
 void printMemory()
 {
-    printf("***********************\n");
+    printf("***************************************\n");
     printf("Printing Memory\n");
     int addr = 0;
 
@@ -111,8 +112,7 @@ void printMemory()
             break;
         addr = GET_NEXT_ADDR(memory[ADDR_TO_INDEX(addr)]);
     }
-
-    printf("***********************\n");
+    printf("***************************************\n");
 }
 
 int getMemBlockIndex(mem_block_t *memBlock)
@@ -120,25 +120,17 @@ int getMemBlockIndex(mem_block_t *memBlock)
     return (memBlock - memory);
 }
 
+/*
+ * Returns the index of which a block of size belongs in.
+ *
+ * @param   size    The size of a block in bytes.
+ */
 int getBucketIndex(int size)
 {
     int index = 0;
 
-    /*
-     * Subtract 1 from the size to ensure a request for memory equal to the
-     * lower limit of a bucket will be grabbed from the appropriate bucket.
-     * ie. size = 64, we know bucket 1 will have a block >= 64.
-     *     64 = 0100 0000 has most significant bit in 7th digit.
-     *     65 = 0100 0001 has most significant bit in 7th digit.
-     *     Based on below algorithm, index = 7-5 = 2 which means 64 and 65 will be placed
-     *     in bucket 2. This is appropriate for size of 65, but 64 can fit in bucket 1.
-     */
-    size--;
+    size >>= 6;
 
-    // Offset bits so that all values <= 32 belong into bucket 0.
-    size >>= 5;
-
-    // Shifts the size bits right to calculate its log2 value.
     while (size)
     {
         size >>= 1;
@@ -158,16 +150,7 @@ void placeInBucket(mem_block_t emptyBlock, int address)
 {
     //choose appropriate bucket
     //place into bucket and do linking
-    int index = 0;
-    int blockBytes = BLOCKS_TO_BYTES(GET_SIZE(emptyBlock));
-
-    // Find the bucket index.
-    blockBytes >>= 6;
-    while (blockBytes)
-    {
-        blockBytes >>= 1;
-        index++;
-    }
+    int index = getBucketIndex(BLOCKS_TO_BYTES(GET_SIZE(emptyBlock)));
 
     if (buckets[index] == -1)
     {
@@ -186,10 +169,42 @@ void placeInBucket(mem_block_t emptyBlock, int address)
     buckets[index] = address;
 }
 
-void removeFromBucket(mem_block_t memBlock)
+/*
+ * Removes the given block from its bucket.
+ *
+ * @param   blockIndex  The index of the block to remove in the memory array.
+ */
+void removeFromBucket(int blockIndex)
 {
-    //
+    int bucketIndex = getBucketIndex(BLOCKS_TO_BYTES(GET_SIZE(memory[blockIndex])));
+    int blockAddr = INDEX_TO_ADDR(blockIndex);
+    int prevBlockAddr = GET_PREV_ADDR(memory[blockIndex + 1]);
+    int nextBlockAddr = GET_NEXT_ADDR(memory[blockIndex + 1]);
+    int prevBlockIndex = ADDR_TO_INDEX(prevBlockAddr);
+    int nextBlockIndex = ADDR_TO_INDEX(nextBlockAddr);
 
+    if ((prevBlockAddr == blockAddr) && (nextBlockAddr == blockAddr))
+    {
+        // Current block is the only block.
+        buckets[bucketIndex] = -1;
+    }
+    else if (prevBlockAddr == blockAddr)
+    {
+        // Current block is the first block.
+        buckets[bucketIndex] = nextBlockAddr;
+        SET_PREV_ADDR(memory[nextBlockIndex], nextBlockAddr);
+    }
+    else if (nextBlockAddr == blockAddr)
+    {
+        // Current block is the end block.
+        SET_NEXT_ADDR(memory[prevBlockIndex], prevBlockAddr);
+    }
+    else
+    {
+        // Current block is between two blocks.
+        SET_NEXT_ADDR(memory[prevBlockIndex], nextBlockAddr);
+        SET_PREV_ADDR(memory[nextBlockIndex], prevBlockAddr);
+    }
 }
 
 /*
@@ -297,7 +312,8 @@ void half_init(void)
 
 void *half_alloc(int size)
 {
-    int bucketIndex;
+    int tempSize = size;
+    int bucketIndex = 0;
     mem_block_t *newAlloc = NULL;
 
     // Don't allocate memory if request was for 0 bytes.
@@ -312,7 +328,28 @@ void *half_alloc(int size)
         return NULL;
     }
 
-    bucketIndex = getBucketIndex(size);
+    /*
+     * Gets the bucket from which a block of size 'size' will be guarenteed to be in.
+     *
+     * Subtract 1 from the size to ensure a request for memory equal to the
+     * lower limit of a bucket will be grabbed from the appropriate bucket.
+     * ie. size = 64, we know bucket 1 will have a block >= 64.
+     *     64 = 0100 0000 has most significant bit in 7th digit.
+     *     65 = 0100 0001 has most significant bit in 7th digit.
+     *     Based on below algorithm, index = 7-5 = 2 which means 64 and 65 will be placed
+     *     in bucket 2. This is appropriate for size of 65, but 64 can fit in bucket 1.
+     */
+    tempSize--;
+
+    // Offset bits so that all values <= 32 belong into bucket 0.
+    tempSize >>= 5;
+
+    // Shifts the size bits right to calculate its log2 value.
+    while (tempSize)
+    {
+        tempSize >>= 1;
+        bucketIndex++;
+    }
 
     // Finds the next biggest bucket that contains blocks of memory.
 
@@ -332,10 +369,10 @@ void half_free(void * freeMemory)
 {
     // One mem_block_t size before the memory address returns the header of the block.
     mem_block_t *freeBlock = GET_MEMORY_HEADER((mem_block_t *)freeMemory);
-    int index = getMemBlockIndex(freeBlock);
-    int startIndex = index;
+    int blockIndex = getMemBlockIndex(freeBlock);
+    int startIndex = blockIndex;
     int blockSize = GET_SIZE(*freeBlock);
-    int blockIndex;
+    int tempBlockIndex;
 
     printf("Index of block to free: %d\n", getMemBlockIndex(freeBlock));
 
@@ -350,37 +387,41 @@ void half_free(void * freeMemory)
      *      2. Update the new block's next pointer with the second block's next pointer.
      */
 
-    // Coalesce previous block. BlockIndex is the index of the previous block.
-    blockIndex = ADDR_TO_INDEX(GET_PREV_ADDR(*freeBlock));
-    if (index != blockIndex)
+    // Coalesce previous block. tempBlockIndex is the index of the previous block.
+    tempBlockIndex = ADDR_TO_INDEX(GET_PREV_ADDR(*freeBlock));
+    if (blockIndex != tempBlockIndex)
     {
         // Check if previous block can be coalesced.
-        if (!GET_ALLOC(memory[blockIndex]))
+        if (!GET_ALLOC(memory[tempBlockIndex]))
         {
-            startIndex = blockIndex;
-            blockSize += GET_SIZE(memory[blockIndex]);
-            SET_NEXT_ADDR(memory[startIndex], GET_NEXT_ADDR(memory[index]));
-            // Remove coalesced block from its bucket.
+            startIndex = tempBlockIndex;
+            blockSize += GET_SIZE(memory[tempBlockIndex]);
+            SET_NEXT_ADDR(memory[startIndex], GET_NEXT_ADDR(memory[blockIndex]));
+
+            // Remove block to be coalesced from its bucket.
+            removeFromBucket(tempBlockIndex);
         }
     }
 
-    // Coalesce next block. BlockIndex is the index of next block.
-    blockIndex = ADDR_TO_INDEX(GET_NEXT_ADDR(*freeBlock));
-    if (index != blockIndex)
+    // Coalesce next block. tempBlockIndex is the index of next block.
+    tempBlockIndex = ADDR_TO_INDEX(GET_NEXT_ADDR(*freeBlock));
+    if (blockIndex != tempBlockIndex)
     {
-        if (!GET_ALLOC(memory[blockIndex]))
+        if (!GET_ALLOC(memory[tempBlockIndex]))
         {
-            blockSize += GET_SIZE(memory[blockIndex]);
-            if (blockIndex == ADDR_TO_INDEX(GET_NEXT_ADDR(memory[blockIndex])))
+            blockSize += GET_SIZE(memory[tempBlockIndex]);
+            if (tempBlockIndex == ADDR_TO_INDEX(GET_NEXT_ADDR(memory[tempBlockIndex])))
             {
                 // If this is the last block, update the next pointer to its own address.
                 SET_NEXT_ADDR(memory[startIndex], INDEX_TO_ADDR(startIndex));
             }
             else
             {
-                SET_NEXT_ADDR(memory[startIndex], GET_NEXT_ADDR(memory[blockIndex]));
+                SET_NEXT_ADDR(memory[startIndex], GET_NEXT_ADDR(memory[tempBlockIndex]));
             }
-            // Remove coalesced block from its bucket.
+
+            // Remove block to be coalesced from its bucket.
+            removeFromBucket(tempBlockIndex);
         }
     }
 
