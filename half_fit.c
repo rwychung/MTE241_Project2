@@ -36,6 +36,7 @@
 
 const int MEMORY_SIZE = 32768;  // The total number of bytes available.
 const int UNIT_BLOCK_SIZE = 32; // Unit memory block size is 32 bytes.
+const int BUCKET_SIZE = 11;
 
 /*
  * The block of memory will contain 8192 blocks of 32 bits.
@@ -115,6 +116,92 @@ void printMemory()
     printf("***************************************\n");
 }
 
+void checkMemory()
+{
+    int prevAddr = 0;
+    int addr = 0;
+    int size = 0;
+
+    printf("Start checking memory\n");
+    while(1)
+    {
+        printf("***************************************\n");
+        printf("Current Addr: %d\n", addr);
+
+        printHeaderInfo(memory[ADDR_TO_INDEX(addr)]);
+        if (prevAddr != GET_PREV_ADDR(memory[ADDR_TO_INDEX(addr)]))
+        {
+            printf("MEMORY DEFRAGED: invalid reference to previous mem block at addr: %d\n", addr);
+            printf("Current addr's prev: %d\n", GET_PREV_ADDR(memory[ADDR_TO_INDEX(addr)]));
+            printf("Prev: %d\n", prevAddr);
+        }
+
+        size += BLOCKS_TO_BYTES(GET_SIZE(memory[ADDR_TO_INDEX(addr)]));
+        if (addr == GET_NEXT_ADDR(memory[ADDR_TO_INDEX(addr)]))
+            break;
+        prevAddr = addr;
+        addr = GET_NEXT_ADDR(memory[ADDR_TO_INDEX(addr)]);
+        printf("***************************************\n");
+    }
+
+    if (size != MEMORY_SIZE)
+    {
+        printf("MEMORY DEFRAGED\n");
+    }
+    printf("Start checking memory\n");
+}
+
+void checkBuckets()
+{
+    int i;
+    int addr = 0;
+    int tempSize = 0;
+    int unallocSize = 0;
+    int bucketSize = 0;
+    mem_block_t tempHeader;
+    while (1)
+    {
+        tempHeader = memory[ADDR_TO_INDEX(addr)];
+        tempSize = GET_SIZE(tempHeader);
+        if (!GET_ALLOC(tempHeader))
+        {
+            unallocSize += tempSize;
+        }
+        if (addr == GET_NEXT_ADDR(memory[ADDR_TO_INDEX(addr)]))
+            break;
+        addr = GET_NEXT_ADDR(memory[ADDR_TO_INDEX(addr)]);
+    }
+
+    for (i=0; i < BUCKET_SIZE; i++)
+    {
+        if (buckets[i] != -1)
+        {
+            addr = buckets[i];
+            while (1)
+            {
+                bucketSize += GET_SIZE(memory[ADDR_TO_INDEX(addr)]);
+                if (addr == GET_NEXT_ADDR(memory[ADDR_TO_INDEX(addr) + 1]))
+                    break;
+                addr = GET_NEXT_ADDR(memory[ADDR_TO_INDEX(addr) + 1]);
+            }
+        }
+    }
+
+    if (bucketSize != unallocSize)
+    {
+        printf("Unalloc size = %d but size of blocks in bucket = %d\n", unallocSize, bucketSize);
+    }
+}
+
+void bucketInit()
+{
+    int i;
+    for (i=0; i<BUCKET_SIZE; i++)
+    {
+        buckets[i] = -1;
+    }
+}
+
 int getMemBlockIndex(mem_block_t *memBlock)
 {
     return (memBlock - memory);
@@ -192,18 +279,18 @@ void removeFromBucket(int blockIndex)
     {
         // Current block is the first block.
         buckets[bucketIndex] = nextBlockAddr;
-        SET_PREV_ADDR(memory[nextBlockIndex], nextBlockAddr);
+        SET_PREV_ADDR(memory[nextBlockIndex + 1], nextBlockAddr);
     }
     else if (nextBlockAddr == blockAddr)
     {
         // Current block is the end block.
-        SET_NEXT_ADDR(memory[prevBlockIndex], prevBlockAddr);
+        SET_NEXT_ADDR(memory[prevBlockIndex + 1], prevBlockAddr);
     }
     else
     {
         // Current block is between two blocks.
-        SET_NEXT_ADDR(memory[prevBlockIndex], nextBlockAddr);
-        SET_PREV_ADDR(memory[nextBlockIndex], prevBlockAddr);
+        SET_NEXT_ADDR(memory[prevBlockIndex + 1], nextBlockAddr);
+        SET_PREV_ADDR(memory[nextBlockIndex + 1], prevBlockAddr);
     }
 }
 
@@ -250,7 +337,10 @@ void splitMemoryBlock(mem_block_t memBlock, int blockIndex, int bytesRequested)
         }
         else
         {
+            // Set split block to point to next block and next block to point to split block.
             SET_NEXT_ADDR(memory[blockIndex2], GET_NEXT_ADDR(memBlock));
+            SET_PREV_ADDR(memory[ADDR_TO_INDEX(GET_NEXT_ADDR(memBlock))],
+                    INDEX_TO_ADDR(blockIndex2));
         }
         SET_SIZE(memory[blockIndex2], blockSize2);
         SET_ALLOC(memory[blockIndex2], 0);
@@ -285,6 +375,9 @@ void* getBucketMemory(int bucketIndex, int bytesRequested)
         buckets[bucketIndex] = GET_NEXT_ADDR(memory[blockIndex + 1]);
     }
 
+    // Remove the block to be allocated from its bucket.
+    removeFromBucket(blockIndex);
+
     // Splits the memory block if necessary.
     splitMemoryBlock(memBlock, blockIndex, bytesRequested);
 
@@ -296,6 +389,7 @@ void half_init(void)
 {
     // Array of 32 bit blocks which make up the 32768 byte block.
     memory = (mem_block_t *)malloc(MEMORY_SIZE);
+    bucketInit();
 
     // Sets the information in the header.
     SET_PREV_ADDR(memory[0], 0);
@@ -315,7 +409,9 @@ void *half_alloc(int size)
     int tempSize = size;
     int bucketIndex = 0;
     mem_block_t *newAlloc = NULL;
+    void *memBlock = NULL;
 
+//    printf("Request for %d bytes\n", size);
     // Don't allocate memory if request was for 0 bytes.
     if (size == 0)
         return NULL;
@@ -324,7 +420,6 @@ void *half_alloc(int size)
 
     if (size > MEMORY_SIZE)
     {
-        printf("Not enough memory\n");
         return NULL;
     }
 
@@ -362,7 +457,9 @@ void *half_alloc(int size)
     if (bucketIndex > 10)
         return NULL;
 
-    return getBucketMemory(bucketIndex, size);
+    memBlock = getBucketMemory(bucketIndex, size);
+    checkBuckets();
+    return memBlock;
 }
 
 void half_free(void * freeMemory)
@@ -374,7 +471,7 @@ void half_free(void * freeMemory)
     int blockSize = GET_SIZE(*freeBlock);
     int tempBlockIndex;
 
-    printf("Index of block to free: %d\n", getMemBlockIndex(freeBlock));
+//    printf("Index of block to free: %d\n", blockIndex);
 
     /*
      * Coalesce the current block of memory with the previous and next blocks.
@@ -397,6 +494,8 @@ void half_free(void * freeMemory)
             startIndex = tempBlockIndex;
             blockSize += GET_SIZE(memory[tempBlockIndex]);
             SET_NEXT_ADDR(memory[startIndex], GET_NEXT_ADDR(memory[blockIndex]));
+            SET_PREV_ADDR(memory[ADDR_TO_INDEX(GET_NEXT_ADDR(memory[blockIndex]))],
+                    INDEX_TO_ADDR(startIndex));
 
             // Remove block to be coalesced from its bucket.
             removeFromBucket(tempBlockIndex);
@@ -418,6 +517,9 @@ void half_free(void * freeMemory)
             else
             {
                 SET_NEXT_ADDR(memory[startIndex], GET_NEXT_ADDR(memory[tempBlockIndex]));
+
+                SET_PREV_ADDR(memory[(ADDR_TO_INDEX(GET_NEXT_ADDR(memory[tempBlockIndex])))],
+                        INDEX_TO_ADDR(startIndex));
             }
 
             // Remove block to be coalesced from its bucket.
@@ -429,4 +531,5 @@ void half_free(void * freeMemory)
     SET_SIZE(memory[startIndex], blockSize);
     SET_ALLOC(memory[startIndex], 0);
     placeInBucket(memory[startIndex], INDEX_TO_ADDR(startIndex));
+    checkBuckets();
 }
